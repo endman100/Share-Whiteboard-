@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" integrity="sha256-yr4fRk/GU1ehYJPAs8P4JlTgu0Hdsp4ZKrx8bDEDC3I=" crossorigin="anonymous"></script>
+	<script src="funO.js"></script>
+	<script src="mySocketConnect.js"></script>
+	<style type="text/css">
+		html, body{
+		    height:100%;
+		    width:100%;
+		    margin:0;
+		    border:0;
+		}
+		#map{
+		    margin:0;
+		    border:5px #FFAC55 solid;
+		}
+		#maphid{
+			border:5px #FFAC55 solid;
+			position:absolute;
+		    top:0px;
+		    left:0px;
+		    z-index:-2;
+		    margin:0;
+		    visibility:hidden;
+		}
+		#mapsSmall{
+			border:5px #FFAC55 solid;
+			position:absolute;
+		    top:0px;
+		    left:0px;
+		    z-index:-1;
+		    margin:0;
+		}
+		#mapsSmall{
+			border:5px #FFAC55 solid;
+		    top:0px;
+		    left:0px;
+		    z-index:1;
+		    margin:0;
+		}
+		#toolDiv{
+			position:absolute;
+		    top:310px;
+		    left:8px;
+		    z-index:1;
+		    margin:0;
+		}
+		.outputText{
+			float : right;
+		}
+		body::-webkit-scrollbar {
+		    display: none;
+		}
+	</style>
+</head>
+<body  onmousewheel="return false;" oncontextmenu="window.event.returnValue=false">
+	<canvas  id="maphid" width="3000" height="3000"></canvas>
+	<canvas id="map" width="3000" height="3000"></canvas>
+	<!--input type="file" id="uploader" />
+	<input type="button" value="輸出圖像" onclick="saveTextAsFile(allObjJson['name'],  JSON.stringify(allObjJson))" />
+	<input type="button" value="新的空白地圖(會刷新物件)" onclick="newMap()" -->
+	<canvas id="mapsSmall" width="300" height="300"></canvas>
+	<div id="toolDiv">
+		線條粗細  <input id='inputLineRoughness' oninput="change()" onchange="change()" type="range" min="1" max="20" step="1" value="1">
+		<br>R  <input id='inputColorR' oninput="changeColor()" onchange="changeColor()" type="range" min="0" max="255" step="1" value="0">
+		<div id='outputColorR' class='outputText'>0</div>
+		<br>G  <input id='inputColorG' oninput="changeColor()" onchange="changeColor()" type="range" min="0" max="255" step="1" value="0">
+		<div id='outputColorG' class='outputText'>0</div>
+		<br>B  <input id='inputColorB' oninput="changeColor()" onchange="changeColor()" type="range" min="0" max="255" step="1" value="0">
+		<div id='outputColorB' class='outputText'>0</div>
+		<br>
+		<div id='colorSample'>
+		<br>
+		<br>
+		<br>
+		</div>
+	</div>
+	
+</body>
+<script type="text/javascript">
+	Array.prototype.remove = function(from, to) {
+		var rest = this.slice((to || from) + 1 || this.length);
+		this.length = from < 0 ? this.length + from : from;
+		return this.push.apply(this, rest);
+	};
+</script>
+<script>
+	setUp();
+	setInterval(function(){drawDrid()},100);
+	setInterval(function(){drawMagnifierSmall(canvasMapHid)},1000)
+	function change() {
+		lineRoughness = document.getElementById('inputLineRoughness').value;
+		console.log("change roughness")
+	}
+	function changeColor() {
+		var r = document.getElementById('inputColorR').value;
+		var g = document.getElementById('inputColorG').value;
+		var b = document.getElementById('inputColorB').value;
+		lineColor = [r,g,b];
+		document.getElementById('outputColorR').innerHTML = r;
+		document.getElementById('outputColorG').innerHTML = g;
+		document.getElementById('outputColorB').innerHTML = b;
+		document.getElementById('colorSample').style.background = "rgb("+lineColor[0]+","+lineColor[1]+","+lineColor[2]+")"
+		console.log("change Color")
+	}
+	canvasMap.onmousedown = function(e){
+		if(e.button == 2){//滑鼠右鍵
+			var rect = canvasMap.getBoundingClientRect();
+			var x = e.clientX - rect.left;
+			var y = e.clientY - rect.top;
+			nx = x, ny = y;
+			
+			console.log("mousedown");
+			
+			function mouseMoveFunction(e){
+				var x = e.clientX - rect.left;
+				var y = e.clientY - rect.top;
+				var direction = {"x":x - nx, "y":y-ny};
+				centerPoint.x += direction.x;
+				centerPoint.y += direction.y;
+				nx = x;
+				ny = y;
+				//console.log(x, y, "mousedownmove");
+
+			};
+			canvasMap.onmousemove  = function(e){
+				mouseMoveFunction(e);
+			};
+			canvasMap.onmouseleave = function(e){
+				canvasMap.onmousemove  = function(e){}
+				//console.log("mousedownleave");
+				
+			}
+		}
+		if(e.button == 0){//滑鼠左鍵
+			var rect = canvasMap.getBoundingClientRect();
+			var x = e.clientX - rect.left;
+			var y = e.clientY - rect.top;
+			nx = x, ny = y;
+			console.log("mousedown");
+			canvasStack= [[],myToken];
+			function mouseMoveFunction(e){
+				var x = e.clientX - rect.left;
+				var y = e.clientY - rect.top;
+				//console.log("store1",[nx, ny, x, y]);
+				//console.log("store",realXY(nx, ny).concat(realXY(x, y)));
+				var temp = realXY(nx, ny).concat(realXY(x, y));
+				temp.push(lineRoughness);
+				temp.push(lineColor);
+				if(canvasStack[0]){
+					canvasStack[0].push(temp);
+				}else{
+					console.log("NO THIS ERROR");
+				}
+				
+				nx = x;
+				ny = y;
+				//console.log(x, y, "mousedownmove");
+
+			};
+			canvasMap.onmousemove  = function(e){
+				mouseMoveFunction(e);
+			};
+			canvasMap.onmouseleave = function(e){
+				canvasMap.onmousemove  = function(e){}
+				console.log(x, y, "mousedownleave");
+				sendJSON(canvasStack)
+				canvasStack= [[],myToken];
+				canvasMap.onmouseleave = function(e){}
+			}
+		}
+	}
+
+	canvasMap.onmouseup = function(e){
+		console.log("mouseup");
+		canvasMap.onmousemove  = function(e){};
+		canvasMap.onmouseleave = function(e){};
+		sendJSON(canvasStack)
+		canvasStack= [[],myToken];
+	};
+	canvasMap.onmouseenter  = function(e){
+		canvasMap.onmousewheel =function(e){
+	        if(e.wheelDelta){            //判斷瀏覽器IE，谷歌滑輪事件
+		        if(e.wheelDelta>0){  //當滑輪向上滾動時
+		        	scale+=0.05;
+		           	console.log("滑輪向上滾動");
+		        }
+		        if(e.wheelDelta<0){          //當滑輪向下滾動時
+		        	scale-=0.05;
+		            console.log("滑輪向下滾動");
+		        }
+	    	}else if(e.detail){             //Firefox滑輪事件
+	            if(e.detail>0){         //當滑輪向下滾動時
+	            	scale-=0.05;
+	                console.log("滑輪向下滾動");
+	       		}
+	         	if(e.detail<0){            //當滑輪向上滾動時
+	         		scale+=0.05;
+	                console.log("滑輪向上滾動");
+	         	}
+	        }
+	        if(scale<0.1){scale = 0.1};
+	 	};
+	};
+	canvasMap.onmouseleave  = function(e){
+		canvasMap.onmousewheel = function(e){};
+	}
+	function KeyPress(e) {
+        var evtobj = window.event? event : e
+	    if (evtobj.keyCode == 90 && evtobj.ctrlKey) {
+	    	console.log("Ctrl+z");	
+	    	CtrlZEvent();
+	    }
+    }
+    document.body.onkeydown = KeyPress;
+</script>
+</html>
